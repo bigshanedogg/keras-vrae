@@ -1,4 +1,5 @@
-'''Example of VRAE on text data
+'''
+Example of VRAE on text data
 VRAE, like VAE, has a modular design. encoder, decoder, and VRAE are 3 models that share weights. After training the VRAE model,
 the encoder can be used to generate latent vectors of text data(sentences/documents).
 The decoder can be used to generate embedding vector of text by sampling the latent vector from a Gaussian distribution with mean = 0 and std = 1.
