@@ -1,9 +1,7 @@
 '''Example of VRAE on text data
-The VAE has a modular design. The encoder, decoder and VRAE
-are 3 models that share weights. After training the VRAE model,
-the encoder can be used to generate latent vectors.
-The decoder can be used to generate embedding vector of text by sampling the
-latent vector from a Gaussian distribution with mean = 0 and std = 1.
+VRAE, like VAE, has a modular design. encoder, decoder, and VRAE are 3 models that share weights. After training the VRAE model,
+the encoder can be used to generate latent vectors of text data(sentences/documents).
+The decoder can be used to generate embedding vector of text by sampling the latent vector from a Gaussian distribution with mean = 0 and std = 1.
 # Reference
 [1] Samuel R. Bowman, Luke Vilnis, Oriol Vinyals, Andrew M. Dai, Rafal Jozefowicz, and Samy Bengio.
 "Generating Sentences from a Continuous Space."
@@ -133,10 +131,10 @@ epochs = 50
 
 # VAE model = encoder + decoder
 # build encoder model
-encoder_input = Input(shape=input_shape, name='encoder_input')
+inputs = Input(shape=input_shape, name='encoder_inputs')
 embedding_layer = Embedding(max_features, embed_dim, input_length=maxlen, trainable=True)
-x = embedding_layer(encoder_input)
-x, h, c = LSTM(intermediate_dim, return_state=True)(x)
+encoder_inputs = embedding_layer(inputs)
+x, h, c = LSTM(intermediate_dim, return_state=True)(encoder_inputs)
 z_mean = Dense(latent_dim, name='z_mean')(x)
 z_log_var = Dense(latent_dim, name='z_log_var')(x)
 
@@ -145,13 +143,13 @@ z_log_var = Dense(latent_dim, name='z_log_var')(x)
 z = Lambda(sampling, output_shape=(latent_dim,), name='z')([z_mean, z_log_var])
 
 # instantiate encoder model
-encoder = Model(encoder_input, [z_mean, z_log_var, z, h, c], name='encoder')
+encoder = Model(inputs, [z_mean, z_log_var, z, h, c], name='encoder')
 encoder.summary()
 plot_model(encoder, to_file='vrae_encoder.png', show_shapes=True)
 
 # build decoder model
-latent_input = Input(shape=(latent_dim,), name='z')
-latent_repeat = RepeatVector(max_features)(latent_input)
+latent_inputs = Input(shape=(latent_dim,), name='z')
+latent_repeat = RepeatVector(maxlen)(latent_inputs)
 h = Input(shape=(intermediate_dim, ), name='encoder_state_h')
 c = Input(shape=(intermediate_dim, ), name='encoder_state_c')
 x, _, _ = LSTM(intermediate_dim, return_sequences=True, return_state=True)(latent_repeat, initial_state=[h, c])
@@ -159,13 +157,13 @@ x, _, _ = LSTM(embed_dim, return_sequences=True, return_state=True)(x)
 outputs = wrappers.TimeDistributed(Dense(embed_dim))(x)
 
 # instantiate decoder model
-decoder = Model([latent_input, h, c], outputs, name='decoder')
+decoder = Model([latent_inputs, h, c], outputs, name='decoder')
 decoder.summary()
 plot_model(decoder, to_file='vrae_decoder.png', show_shapes=True)
 
 # instantiate VAE model
-outputs = decoder(encoder(encoder_input)[2:])
-vrae = Model(encoder_input, outputs, name='vrae')
+outputs = decoder(encoder(inputs)[2:])
+vrae = Model(inputs, outputs, name='vrae')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -177,8 +175,8 @@ if __name__ == '__main__':
     data = (x_test, y_test)
 
     # VRAE loss = kl_loss + mse_loss
-    reconstruction_loss = mse(inputs, outputs)
-    # something
+    reconstruction_loss = mse(encoder_inputs, outputs)
+    reconstruction_loss = K.sum(reconstruction_loss, axis=-1)
     kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
     kl_loss = K.sum(kl_loss, axis=-1)
     kl_loss *= -0.5
@@ -186,7 +184,6 @@ if __name__ == '__main__':
     vrae.add_loss(vrae_loss)
     vrae.compile(optimizer='adam')
     vrae.summary()
-
     plot_model(vrae,
                to_file='vrae.png',
                show_shapes=True)
